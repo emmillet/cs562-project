@@ -113,6 +113,153 @@ def parser(filename: str):
 
     return s_transformed, n, group_attr, sorted(f_list), sigma, g_transformed
 
+# PLEASE NOTE: 
+# these defintions are just here to see how we might want the logic to look like 
+# and then well put this junk into the actual _generated.py
+
+# not too sure calling this would work because of like the possibility of not being able to close the connection and stuff when finished but just a thought 
+# thus its logic is kinda hardcoded everywhere
+# def connect():
+#     def connect():
+#     load_dotenv()
+
+#     user = os.getenv('USER')
+#     password = os.getenv('PASSWORD')
+#     dbname = os.getenv('DBNAME')
+
+#     conn = psycopg2.connect("dbname="+dbname+" user="+user+" password="+password,
+#                             cursor_factory=psycopg2.extras.DictCursor)
+#     cur = conn.cursor()
+#     return cur
+
+def schema():
+    load_dotenv()
+
+    user = os.getenv('USER')
+    password = os.getenv('PASSWORD')
+    dbname = os.getenv('DBNAME')
+
+    conn = psycopg2.connect("dbname="+dbname+" user="+user+" password="+password,
+                            cursor_factory=psycopg2.extras.DictCursor)
+    cur = conn.cursor()
+    cur.execute("SELECT column_name, data_type FROM information_schema.columns")
+
+    schema = []
+    for row in cur:
+        schema.append(row) # of the form {'column_name': name (obv), 'data_type': type (also obv)}
+    
+    return schema
+
+# def mf_construct(v, f_vect): # prob not the final format for mf_struct but just to have smth down to work on the other things
+#     mf_struct = {}
+#     for ga in v:
+#         mf_struct[ga] = []
+#     for gv in f_vect:
+#         mf_struct[gv] = []
+
+#     return mf_struct # makes sense for the specific nature of the columns in the mf structure table of the paper but implementation-wise not quite
+
+mf_struct = [] # populate with mf_add() using dictionaries of structure {"grp_attr1": grp_attr1, "grp_attr2": grp_attr2, ..., "grp_v1": grp_v1, "grp_v2": grp_v2}
+           
+def mf_add(curr_row, v, f_vect): # add entry to mf structure 
+    row_struct = {}
+    for ga in v: # maybe make phi a global in the generated so we dont ahve to keep passsing it in?
+        row_struct[ga] = curr_row[ga]
+    for gv in f_vect:
+        row_struct[gv] = 0
+    mf_struct.append(row_struct)
+    return mf_struct[-1]
+
+def mf_lookup(curr_row, v): # look up mf structure entry by group by attributes
+    for i in range(len(mf_struct)): # using indexes so that we can return -1 to indicate failure
+        check = True
+        for ga in v:
+            if curr_row[ga] != mf_struct[i][ga]:
+                check = False
+                break
+        if (check):
+            return i 
+    return -1
+            
+def output(): # output mf_struct as a table
+    # also move this into generated.py
+    return tabulate.tabulate(mf_struct, headers="keys", tablefmt="psql") # change as needed ofc
+
+def sigma_decouple(sigma_pred): # removes the "="
+    # this is assuming im correctly understanding how we're storing sigma in phi
+    dec_sigma = sigma_pred.split('=')
+    return dec_sigma
+
+def gv_cmp(curr_row, sigma_pred): # takes an mf_structure row, the entire phi f_vect, a single sigma_pred
+    dec_sigma = sigma_decouple(sigma_pred)
+    cmp_col = dec_sigma[0].split('.')[1]
+    if (curr_row[cmp_col] == dec_sigma[1]): # expand to account for predicates that rely on pre established predicates 
+        return True
+    else:
+        return False
+    
+
+
+# refer to diagrams in the project guide pdf and second research paper 
+def mf_populate(v, f_vect): # populates the in-memory global mf_structure w the base values before predicate compares
+    # also should prob have phi set up globally so we dont have to keep passing in phi.v and phi.f_vect
+    # can prob do that query() function in tmp here before the loop
+
+    load_dotenv() # again, can prob make a function for this repetitive code (i.e. the query() in tmp)
+
+    user = os.getenv('USER')
+    password = os.getenv('PASSWORD')
+    dbname = os.getenv('DBNAME')
+
+    conn = psycopg2.connect("dbname="+dbname+" user="+user+" password="+password,
+                            cursor_factory=psycopg2.extras.DictCursor)
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM sales")
+    for row in cur:
+        pos = mf_lookup(row, v)
+        if (pos == -1):
+            mf_add(row, v, f_vect)
+
+# populate mf structure columns according to predicates and stuff
+# input: 
+# gv -- grouping variable by which this populaates the mf_structure
+# v -- phi's v field
+# sigma -- sigma field from phi 
+def mf_populate_pred(gv, v, sigma): 
+    load_dotenv() # again, can prob make a function for this repetitive code (i.e. the query() in tmp)
+
+    user = os.getenv('USER')
+    password = os.getenv('PASSWORD')
+    dbname = os.getenv('DBNAME')
+
+    conn = psycopg2.connect("dbname="+dbname+" user="+user+" password="+password,
+                            cursor_factory=psycopg2.extras.DictCursor)
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM sales")
+    gv_parsed = gv.strip().lower().split('_') # gets the name of the grouping variable so as to compare that with the predicates in sigma
+    preds = []
+    for pred in sigma:
+        if gv_parsed[1] in sigma:
+            preds.append(sigma)
+    for row in cur:
+        check = True
+        for pred in preds:
+            if (gv_cmp(row, pred) == False):
+                check = False # stop processing current row 
+                break
+        if (check):
+            # grouping variable aggregate functions and attributes (i.e. count, quant from count_1_quant and stuff)
+            gv_aggfn, gv_attr = gv_parsed[0], gv_parsed[2]
+            match (gv_aggfn):
+                case ["count"]:
+                    pos = mf_lookup(row, v)
+                    mf_struct[pos][gv_aggfn] += 1 
+                case _:
+                    break
+
+
+
+
 
 def main():
     """
