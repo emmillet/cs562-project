@@ -1,6 +1,6 @@
 select cust, sum(x.quant), sum(y.quant), sum(z.quant)
 from sales
-group by cust: x, y, z
+group by cust ; x, y, z
 such that x.state = 'NY'
 and y.state = 'NJ'
 and z.state = 'CT'

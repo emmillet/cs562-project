@@ -1,5 +1,10 @@
+import os
 import subprocess
 import re
+
+from dotenv import load_dotenv
+import psycopg2
+import tabulate
 
 class phi:
     def __init__(self):
@@ -58,7 +63,7 @@ def parser(filename: str):
     # EXTRACT GROUP BY
     group_by_line = next(line for line in lines if line.lower().startswith("group by"))
     group_by_body = group_by_line.replace("group by", "", 1).strip()
-    group_attr, group_vars_raw = group_by_body.split(":", 1)
+    group_attr, group_vars_raw = group_by_body.split(";", 1)
     group_attr = group_attr.strip()
     group_vars = [var.strip() for var in group_vars_raw.split(",")]
     n = len(group_vars)

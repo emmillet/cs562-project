@@ -1,0 +1,5 @@
+select prod, month, sum(x.sale)/sum(y.sale)
+from sales
+where year=2024
+group by prod, month ; x,y
+such that x.prod = prod and x.month = month, y.prod = prod
