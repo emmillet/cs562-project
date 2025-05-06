@@ -73,9 +73,9 @@ def parser(filename: str):
     # Join all lines into a single string to use with re.findall
     lines_string = "\n".join(lines)
     # Now use re.findall to capture the specific attribute and its value
-    sigma_preds = re.findall(r"\w+\.(\w+) = '(.*?)'", lines_string)
+    sigma_preds = re.findall(r"(\w+\.\w+\s*[=<>]+\s*['\"]?\w+['\"]?)", lines_string)
     # Create the formatted list in one line using both the attribute and its value
-    sigma = [f"{attribute}='{value}'" for attribute, value in sigma_preds]
+    sigma = [pred.strip().replace(' ', '') for pred in sigma_preds] 
 
     # EXTRACT HAVING
     having_line = next((line for line in lines if line.lower().startswith("having")), "")
@@ -98,7 +98,7 @@ def parser(filename: str):
         field -- the field being aggregated (e.g., 'quant')
         """
         index = group_vars.index(var) + 1
-        return f"{index}_{func.lower()}_{field}"
+        return f"f{index}_{func.lower()}_{field}"
 
     # Collect labels for all aggregate functions in SELECT and HAVING
     for text in projected_attrs + [having_pred]:
@@ -155,23 +155,41 @@ def schema():
     
     return schema
 
-# def mf_construct(v, f_vect): # prob not the final format for mf_struct but just to have smth down to work on the other things
-#     mf_struct = {}
-#     for ga in v:
-#         mf_struct[ga] = []
-#     for gv in f_vect:
-#         mf_struct[gv] = []
+def mf_construct(v, f_vect): # prob not the final format for mf_struct but just to have smth down to work on the other things
+    mf_struct = {}
+    for ga in v:
+        mf_struct[ga] = []
+    for gv in f_vect:
+        mf_struct[f"f{gv}"] = []
 
-#     return mf_struct # makes sense for the specific nature of the columns in the mf structure table of the paper but implementation-wise not quite
+    return mf_struct # makes sense for the specific nature of the columns in the mf structure table of the paper but implementation-wise not quite
 
 mf_struct = [] # populate with mf_add() using dictionaries of structure {"grp_attr1": grp_attr1, "grp_attr2": grp_attr2, ..., "grp_v1": grp_v1, "grp_v2": grp_v2}
            
-def mf_add(curr_row, v, f_vect): # add entry to mf structure 
+def mf_add(curr_row, v, f_vect):
     row_struct = {}
-    for ga in v: # maybe make phi a global in the generated so we dont ahve to keep passsing it in?
+    # Handle grouping attributes
+    group_attrs = [v] if isinstance(v, str) else v
+    for ga in group_attrs:
         row_struct[ga] = curr_row[ga]
-    for gv in f_vect:
-        row_struct[gv] = 0
+    
+    # Initialize all aggregate fields
+    for agg_field in f_vect:
+        if 'sum' in agg_field:
+            row_struct[agg_field] = 0.0
+        elif 'avg' in agg_field:
+            row_struct[agg_field] = 0.0  # Will calculate actual avg later
+            sum_field = agg_field.replace('avg', 'sum')
+            count_field = agg_field.replace('avg', 'count')
+            row_struct[sum_field] = 0.0
+            row_struct[count_field] = 0
+        elif 'count' in agg_field:
+            row_struct[agg_field] = 0
+        elif 'max' in agg_field:
+            row_struct[agg_field] = -float('inf')
+        elif 'min' in agg_field:
+            row_struct[agg_field] = float('inf')
+    
     mf_struct.append(row_struct)
     return mf_struct[-1]
 
@@ -203,7 +221,6 @@ def gv_cmp(curr_row, sigma_pred): # takes an mf_structure row, the entire phi f_
     else:
         return False
     
-
 
 # refer to diagrams in the project guide pdf and second research paper 
 def mf_populate(v, f_vect): # populates the in-memory global mf_structure w the base values before predicate compares
@@ -255,15 +272,152 @@ def mf_populate_pred(gv, v, sigma):
         if (check):
             # grouping variable aggregate functions and attributes (i.e. count, quant from count_1_quant and stuff)
             gv_aggfn, gv_attr = gv_parsed[0], gv_parsed[2]
-            match (gv_aggfn):
-                case ["count"]:
-                    pos = mf_lookup(row, v)
-                    mf_struct[pos][gv_aggfn] += 1 
-                case _:
-                    break
+            if gv_aggfn == ["count"]:
+                pos = mf_lookup(row, v)
+                mf_struct[pos][gv_aggfn] += 1
+            else:
+                break
+# helper function for print debugging in H_table 
+def print_sample_groups(groups, max_print=3):
+    """Print sample groups for debugging"""
+    print("Sample groups:")
+    for i, group in enumerate(groups[:max_print]):
+        print(f"Group {i}: {group}")
+    if len(groups) > max_print:
+        print(f"... plus {len(groups)-max_print} more groups")
 
+# Function to do passes for H table algorithm as detailed in research paper 
+def H_table(phi):
+    global mf_struct
+    mf_struct = []
+    if isinstance(phi.V, str):
+        phi.V = [phi.V]
+    print(f"PHI parameters received:")
+    print(f"S: {phi.S}")
+    print(f"n: {phi.n}")
+    print(f"V: {phi.V}") 
+    print(f"F: {phi.F}")
+    print(f"sigma: {phi.sigma}")
+    print(f"G: {phi.G}")
+    # SCAN 1: Populate initial groups
+    print("\nSCAN 1: Populating initial groups")
+    mf_populate(phi.V, phi.F)
+    print(f"Initial groups created: {len(mf_struct)} entries")
+    print_sample_groups(mf_struct)
 
+    # Process each grouping variable in sequence
+    for gv_idx in range(phi.n):
+        # Get the corresponding predicate from sigma
+        pred = phi.sigma[gv_idx] if gv_idx < len(phi.sigma) else ""
+        
+        # Determine which aggregate fields belong to this grouping variable
+        gv_prefix = f"f{gv_idx+1}_"
+        target_fields = [f for f in phi.F if f.startswith(gv_prefix)]
+        
+        print(f"\nSCAN {gv_idx+2}: Processing grouping variable {gv_idx+1}")
+        print(f"Predicate: {pred}")
+        print(f"Target fields: {target_fields}")
+        
+        load_dotenv()
+        conn = psycopg2.connect(
+            f"dbname={os.getenv('DBNAME')} user={os.getenv('USER')} password={os.getenv('PASSWORD')}",
+            cursor_factory=psycopg2.extras.DictCursor
+        )
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM sales")
+        
+        rows_processed = 0
+        rows_matched = 0
+        
+        for row in cur:
+            rows_processed += 1
+            # Check predicate if exists
+            if pred and not gv_cmp(row, pred):
+                continue
+                
+            pos = mf_lookup(row, phi.V)
+            if pos == -1:
+                continue
+                
+            rows_matched += 1
+            # Update all target fields for this grouping variable
+            for field in target_fields:
+                if 'sum' in field:
+                    mf_struct[pos][field] += float(row['quant'])
+                elif 'avg' in field:
+                    sum_field = field.replace('avg', 'sum')
+                    count_field = field.replace('avg', 'count')
+                    mf_struct[pos][sum_field] += float(row['quant'])
+                    mf_struct[pos][count_field] += 1
+                    if mf_struct[pos][count_field] > 0:
+                        mf_struct[pos][field] = mf_struct[pos][sum_field] / mf_struct[pos][count_field]
+                elif 'count' in field:
+                    mf_struct[pos][field] += 1
+                elif 'max' in field:
+                    mf_struct[pos][field] = max(mf_struct[pos][field], float(row['quant']))
+                elif 'min' in field:
+                    mf_struct[pos][field] = min(mf_struct[pos][field], float(row['quant']))
+        
+        print(f"Processed {rows_processed} rows, matched {rows_matched} rows")
+        print(f"Updated {len(mf_struct)} groups")
+        print_sample_groups(mf_struct)
 
+    # Apply HAVING clause
+    if phi.G:
+        print("\nApplying HAVING clause:", phi.G)
+        initial_count = len(mf_struct)
+        
+        try:
+            # Print for debug
+            if mf_struct:
+                print("Debug:")
+                print({k: v for k, v in mf_struct[0].items()})
+            
+            # Evaluate HAVING clause
+            filtered = []
+            for entry in mf_struct:
+                try:
+                    if eval(phi.G, {}, entry):
+                        filtered.append(entry)
+                except Exception as e:
+                    print(f"Error evaluating HAVING on entry: {e}")
+                    continue
+            
+            mf_struct = filtered
+            print(f"Filtered from {initial_count} to {len(mf_struct)} entries")
+            
+        except Exception as e:
+            print(f"Error evaluating HAVING clause: {e}")
+            print("Available fields:", mf_struct[0].keys() if mf_struct else "empty")
+            return []
+        
+    # might not work for all queries but it's to filter the mf to only the S attributes for output
+
+    if phi.S and mf_struct:
+        # Get the list of columns to keep (both grouping attributes and selected aggregates)
+        columns_to_keep = []
+        
+        # First add grouping attributes (V)
+        columns_to_keep.extend(phi.V)
+        
+        # Then add any aggregate functions mentioned in S
+        for s in phi.S:
+            # Check if this is an aggregate function (starts with f)
+            if s.startswith('f') and s in mf_struct[0]:
+                columns_to_keep.append(s)
+            # Also keep any grouping attributes mentioned in S
+            elif s in phi.V and s not in columns_to_keep:
+                columns_to_keep.append(s)
+        
+        # Filter each row to only keep the requested columns
+        filtered_mf_struct = []
+        for row in mf_struct:
+            filtered_row = {col: row[col] for col in columns_to_keep if col in row}
+            filtered_mf_struct.append(filtered_row)
+        
+        return filtered_mf_struct
+    
+    return mf_struct
 
 
 def main():
@@ -272,11 +426,25 @@ def main():
     needed to run the query. That generated code should be saved to a 
     file (e.g. _generated.py) and then run.
     """
-
+    # Body gets input from user, then parses into phi. This is then given to H_table to do the processing
     body = """
-    for row in cur:
-        if row['quant'] > 10:
-            _global.append(row)
+    S, n, V, F, sigma, G = get_input()
+    class mf_struct:
+        def __init__(self):
+            self.S = [] # projected values
+            self.n = 0 # number of grouping variables
+            self.V = [] # group by attributes
+            self.F = [] # list of aggregates
+            self.sigma = [] # grouping variables predicates 
+            self.G = None # having clause
+    mf_struct = mf_struct() 
+    mf_struct.S = S
+    mf_struct.n = n
+    mf_struct.V = V
+    mf_struct.F = F
+    mf_struct.sigma = sigma
+    mf_struct.G = G
+    H = H_table(mf_struct)
     """
 
     # Note: The f allows formatting with variables.
@@ -287,10 +455,12 @@ import psycopg2
 import psycopg2.extras
 import tabulate
 from dotenv import load_dotenv
+from generator import *
 
 # DO NOT EDIT THIS FILE, IT IS GENERATED BY generator.py
 
 def query():
+
     load_dotenv()
 
     user = os.getenv('USER')
@@ -305,7 +475,7 @@ def query():
     _global = []
     {body}
     
-    return tabulate.tabulate(_global,
+    return tabulate.tabulate(H,
                         headers="keys", tablefmt="psql")
 
 def main():
