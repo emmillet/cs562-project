@@ -1,0 +1,5 @@
+select prod, AVG(x.quant), AVG(y.quant)
+from sales
+group by prod ; x, y
+such that x.year = 2019 and y.year = 2020
+having AVG(x.quant) > AVG(y.quant)
