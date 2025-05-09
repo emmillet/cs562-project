@@ -64,7 +64,7 @@ def parser(filename: str):
     group_by_line = next(line for line in lines if line.lower().startswith("group by"))
     group_by_body = group_by_line.replace("group by", "", 1).strip()
     group_attr, group_vars_raw = group_by_body.split(";", 1)
-    group_attr = group_attr.strip()
+    group_attr = [ga.strip() for ga in group_attr.split(',')]
     group_vars = [var.strip() for var in group_vars_raw.split(",")]
     n = len(group_vars)
 
@@ -73,9 +73,29 @@ def parser(filename: str):
     # Join all lines into a single string to use with re.findall
     lines_string = "\n".join(lines)
     # Now use re.findall to capture the specific attribute and its value
-    sigma_preds = re.findall(r"(\w+\.\w+\s*[=<>]+\s*['\"]?\w+['\"]?)", lines_string)
-    # Create the formatted list in one line using both the attribute and its value
-    sigma = [pred.strip().replace(' ', '') for pred in sigma_preds] 
+    
+    sigma = []
+    preds_per_gv = lines_string.split('such that')[1].split('having')[0]
+    if ',' in preds_per_gv: 
+        preds_per_gv = preds_per_gv.split(',')
+        for preds in preds_per_gv: # handles ands but not ors, expand if possible can prob make a function to handle it recusrively
+            preds = preds.strip().split('and')
+            for pred in preds:
+                pred = pred.strip()
+            sigma.append(preds)
+            # also need to find a way to incorporate stuff like <> as u did below but for this
+    else: 
+        preds_per_gv = preds_per_gv.split('and')
+        for preds in preds_per_gv: # handles ands but not ors, expand if possible 
+            for pred in preds:
+                pred = pred.strip()
+            sigma.append(preds)
+            # also need to find a way to incorporate stuff like <> as u did below but for this
+        
+
+    # sigma_preds = re.findall(r"(\w+\.\w+\s*[=<>]+\s*['\"]?\w+['\"]?)", lines_string)
+    # # Create the formatted list in one line using both the attribute and its value
+    # sigma = [pred.strip().replace(' ', '') for pred in sigma_preds] 
 
     # EXTRACT HAVING
     having_line = next((line for line in lines if line.lower().startswith("having")), "")
@@ -213,13 +233,42 @@ def sigma_decouple(sigma_pred): # removes the "="
     dec_sigma = sigma_pred.split('=')
     return dec_sigma
 
-def gv_cmp(curr_row, sigma_pred): # takes an mf_structure row, the entire phi f_vect, a single sigma_pred
-    dec_sigma = sigma_decouple(sigma_pred)
-    cmp_col = dec_sigma[0].split('.')[1]
-    if (curr_row[cmp_col] == dec_sigma[1]): # expand to account for predicates that rely on pre established predicates 
-        return True
+# def gv_cmp(curr_row, sigma_pred): # takes an mf_structure row, the entire phi f_vect, a single sigma_pred
+#     dec_sigma = sigma_decouple(sigma_pred)
+#     cmp_col = dec_sigma[0].split('.')[1]
+#     if (curr_row[cmp_col] == dec_sigma[1]): # expand to account for predicates that rely on pre established predicates 
+#         return True
+#     else:
+#         return False
+    
+def gv_cmp(left_row, sigma_pred, right_row):
+    lcol, rcol = sigma_decouple(sigma_pred)
+    l_has_row = True
+    r_has_row = True
+    if '.' in lcol:
+        lcol = lcol.split('.')[1]
     else:
-        return False
+        l_has_row = False
+    if '.' in rcol:
+        rcol = rcol.split('.')[1]
+    else:
+        r_has_row = False
+    lcol = lcol.strip()
+    rcol = rcol.strip()
+
+
+    # ldict = isinstance(left_row, dict) or isinstance(left_row, psycopg2.extras.DictRow)
+    # rdict = isinstance(right_row, dict) or isinstance(right_row, psycopg2.extras.DictRow)
+
+    if l_has_row and r_has_row:
+        return (left_row[lcol] == right_row[rcol])
+    elif l_has_row and not r_has_row:
+        return (left_row[lcol] == rcol)
+    elif not l_has_row and r_has_row:
+        return (lcol == right_row[rcol])
+    else:
+        return (lcol == rcol)
+    
     
 
 # refer to diagrams in the project guide pdf and second research paper 
@@ -266,7 +315,7 @@ def mf_populate_pred(gv, v, sigma):
     for row in cur:
         check = True
         for pred in preds:
-            if (gv_cmp(row, pred) == False):
+            if (gv_cmp(row, pred, False) == False):
                 check = False # stop processing current row 
                 break
         if (check):
@@ -307,15 +356,18 @@ def H_table(phi):
 
     # Process each grouping variable in sequence
     for gv_idx in range(phi.n):
-        # Get the corresponding predicate from sigma
-        pred = phi.sigma[gv_idx] if gv_idx < len(phi.sigma) else ""
+        # Get the corresponding predicates from sigma
+        # pred = phi.sigma[gv_idx] if gv_idx < len(phi.sigma) else ""
         
         # Determine which aggregate fields belong to this grouping variable
         gv_prefix = f"f{gv_idx+1}_"
         target_fields = [f for f in phi.F if f.startswith(gv_prefix)]
-        
+
+        preds = phi.sigma[gv_idx]
+
         print(f"\nSCAN {gv_idx+2}: Processing grouping variable {gv_idx+1}")
-        print(f"Predicate: {pred}")
+        # print(f"Predicate: {pred}")
+        print(f"Predicates: {preds}")
         print(f"Target fields: {target_fields}")
         
         load_dotenv()
@@ -331,32 +383,54 @@ def H_table(phi):
         
         for row in cur:
             rows_processed += 1
-            # Check predicate if exists
-            if pred and not gv_cmp(row, pred):
-                continue
+            # if pred and not gv_cmp(row, pred):
+            #     continue
                 
             pos = mf_lookup(row, phi.V)
             if pos == -1:
                 continue
+
+            if not isinstance(preds, list):
+                lrow, rrow = preds.split('=')
+                lrow = lrow.strip()
+                rrow = rrow.strip()
+                lrow = row
+                rrow = row
+                if not gv_cmp(lrow, preds, rrow): # before, could only handle if a field equalled some string now it can compare fields as well
+                    continue
+            # Check predicate if exists 
+            else:
+                for pred in preds:
+                    if pred:
+                        lrow, rrow = pred.split('=')
+                        lrow = lrow.strip()
+                        rrow = rrow.strip()
+                        lrow = mf_struct[pos] if '.' in lrow else row
+                        rrow = mf_struct[pos] if '.' in rrow else row
+                        if not gv_cmp(lrow, pred, rrow): # before, could only handle if a field equalled some string now it can compare fields as well
+                            continue
                 
             rows_matched += 1
             # Update all target fields for this grouping variable
             for field in target_fields:
-                if 'sum' in field:
-                    mf_struct[pos][field] += float(row['quant'])
-                elif 'avg' in field:
+                _gv, agg, col = field.split('_')
+                if agg == 'sum':
+                    mf_struct[pos][field] += float(row[col])
+                elif agg == 'avg':
                     sum_field = field.replace('avg', 'sum')
+                    if (not 'sum' in ' '.join(target_fields)):
+                        mf_struct[pos][sum_field] += float(row[col])
+
                     count_field = field.replace('avg', 'count')
-                    mf_struct[pos][sum_field] += float(row['quant'])
                     mf_struct[pos][count_field] += 1
                     if mf_struct[pos][count_field] > 0:
                         mf_struct[pos][field] = mf_struct[pos][sum_field] / mf_struct[pos][count_field]
-                elif 'count' in field:
+                elif agg == 'count':
                     mf_struct[pos][field] += 1
-                elif 'max' in field:
-                    mf_struct[pos][field] = max(mf_struct[pos][field], float(row['quant']))
-                elif 'min' in field:
-                    mf_struct[pos][field] = min(mf_struct[pos][field], float(row['quant']))
+                elif agg == 'max':
+                    mf_struct[pos][field] = max(mf_struct[pos][field], float(row[col]))
+                elif agg == 'min':
+                    mf_struct[pos][field] = min(mf_struct[pos][field], float(row[col]))
         
         print(f"Processed {rows_processed} rows, matched {rows_matched} rows")
         print(f"Updated {len(mf_struct)} groups")
@@ -395,25 +469,59 @@ def H_table(phi):
 
     if phi.S and mf_struct:
         # Get the list of columns to keep (both grouping attributes and selected aggregates)
-        columns_to_keep = []
+        # columns_to_keep = []
         
-        # First add grouping attributes (V)
-        columns_to_keep.extend(phi.V)
+        # # First add grouping attributes (V)
+        # columns_to_keep.extend(phi.V)
         
-        # Then add any aggregate functions mentioned in S
-        for s in phi.S:
-            # Check if this is an aggregate function (starts with f)
-            if s.startswith('f') and s in mf_struct[0]:
-                columns_to_keep.append(s)
-            # Also keep any grouping attributes mentioned in S
-            elif s in phi.V and s not in columns_to_keep:
-                columns_to_keep.append(s)
+        # # Then add any aggregate functions mentioned in S
+        # for s in phi.S:
+        #     # Check if this is an aggregate function (starts with f)
+        #     if s.startswith('f') and s in mf_struct[0]:
+        #         columns_to_keep.append(s)
+        #     # Also keep any grouping attributes mentioned in S
+        #     elif s in phi.V and s not in columns_to_keep:
+        #         columns_to_keep.append(s)
         
-        # Filter each row to only keep the requested columns
+        # # Filter each row to only keep the requested columns
+        # filtered_mf_struct = []
+        # for row in mf_struct:
+        #     filtered_row = {col: row[col] for col in columns_to_keep if col in row}
+        #     filtered_mf_struct.append(filtered_row)
+
+        columns_to_keep = phi.S
         filtered_mf_struct = []
         for row in mf_struct:
-            filtered_row = {col: row[col] for col in columns_to_keep if col in row}
+            filtered_row = {}
+            for col in columns_to_keep:
+                if '/' in col:
+                    dividend, divisor = col.split('/')
+                    dividend = dividend.strip()
+                    divisor = divisor.strip()
+                    filtered_row[col] = row[dividend] / row[divisor]
+                elif '*' in col:
+                    num1, num2 = col.split('*')
+                    num1 = num1.strip()
+                    num2 = num2.strip()
+                    filtered_row[col] = row[num1] * row[num2]
+                elif '+' in col:
+                    num1, num2 = col.split('+')
+                    num1 = num1.strip()
+                    num2 = num2.strip()
+                    filtered_row[col] = row[num1] + row[num2]
+                elif '-' in col:
+                    num1, num2 = col.split('-')
+                    num1 = num1.strip()
+                    num2 = num2.strip()
+                    filtered_row[col] = row[num1] - row[num2]
+                else: 
+                    filtered_row[col] = row[col]
             filtered_mf_struct.append(filtered_row)
+
+                    
+
+            
+
         
         return filtered_mf_struct
     

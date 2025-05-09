@@ -1,0 +1,42 @@
+WITH base as
+(
+    SELECT distinct prod, quant
+    FROM sales
+    ORDER BY 1, 2
+),
+pos as
+(
+    SELECT b.prod, b.quant, count(s.quant) pos
+    FROM sales s, base b
+    WHERE s.prod = b.prod and s.quant <= b.quant    
+    GROUP BY b.prod, b.quant
+    -- ORDER BY prod, quant, pos
+    -- ORDER BY pos
+),
+temp_med_pos as 
+(
+    SELECT x.prod, pos
+    FROM pos x, sales s
+    WHERE x.prod = s.prod
+    GROUP BY x.prod, x.pos
+    HAVING x.pos >= ceiling(count(s.quant) / 2)
+    ORDER BY prod, pos
+),
+med_pos as
+(
+    SELECT x.prod, x.pos median_pos
+    FROM temp_med_pos x, temp_med_pos y
+    WHERE x.prod = y.prod
+    GROUP BY x.prod, x.pos
+    HAVING x.pos = min(y.pos)
+),
+t1 as
+(
+    SELECT p.prod, p.quant, p.pos
+    FROM pos p, med_pos mp
+    WHERE p.prod = mp.prod and p.pos >= mp.median_pos
+)
+    SELECT t1.prod product, min(t1.quant) median_quant
+    FROM t1
+    GROUP BY t1.prod
+	

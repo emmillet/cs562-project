@@ -1,4 +1,4 @@
-select prod, month, sum(x.sale)/sum(y.sale)
+select prod, month, sum(x.quant)/sum(y.quant)
 from sales
 where year=2024
 group by prod, month ; x,y

@@ -1,0 +1,47 @@
+WITH q1 as
+(
+    SELECT cust, max(quant) first_max
+    FROM sales
+    WHERE state = 'NJ'
+    GROUP BY cust
+),
+q2 as
+(
+    SELECT s.cust, max(quant) second_max
+    FROM sales s, q1
+    WHERE 
+        q1.cust = s.cust and
+        s.quant < first_max and 
+        state = 'NJ'
+    GROUP BY s.cust
+), 
+q3 as
+(
+    SELECT s.cust, max(quant) third_max
+    FROM sales s, q2
+    WHERE 
+        q2.cust = s.cust and
+        s.quant < second_max and 
+        state = 'NJ'
+    GROUP BY s.cust
+)
+((
+    SELECT s.cust customer, quant quantity, prod product, date
+    FROM sales s, q1
+    WHERE s.cust = q1.cust and quant = first_max and state = 'NJ'
+    -- ORDER BY s.customer
+) UNION (
+    SELECT s.cust customer, quant quantity, prod product, date
+    FROM sales s, q2
+    WHERE s.cust = q2.cust and quant = second_max and state = 'NJ'
+    -- ORDER BY s.customer
+))
+UNION
+(
+    SELECT s.cust customer, quant quantity, prod product, date
+    FROM sales s, q3
+    WHERE s.cust = q3.cust and quant = third_max and state = 'NJ'
+    -- ORDER BY s.customer
+)
+ORDER BY customer, quantity, product
+

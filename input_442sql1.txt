@@ -1,0 +1,36 @@
+WITH q1 as 
+(
+    SELECT cust, prod, month, avg(quant)
+    FROM sales 
+    GROUP BY cust, prod, month
+),
+q2 as (
+    SELECT x.cust, x.prod, x.month, y.avg prev_avg
+    FROM q1 x left join q1 y
+    ON x.month - 1 = y.month and x.cust = y.cust and x.prod = y.prod
+),
+q3 as (
+    SELECT x.cust, x.prod, x.month, y.avg next_avg
+    FROM q1 x left join q1 y
+    ON x.month + 1 = y.month and x.cust = y.cust and x.prod = y.prod
+),
+q4 as (
+    SELECT q1.cust, q1.prod, q1.month, avg, prev_avg 
+    FROM q1, q2
+    WHERE q1.cust = q2.cust and q1.prod = q2.prod and q1.month = q2.month
+),
+q5 as (
+    SELECT q4.cust, q4.prod, q4.month, avg, prev_avg, next_avg 
+    FROM q3, q4
+    WHERE q3.cust = q4.cust and q3.prod = q4.prod and q3.month = q4.month
+)
+    SELECT r.cust customer, r.prod product, r.month, count(quant) sales_count_between_avgs
+    FROM sales s right join q5 r
+    ON 
+        s.cust = r.cust and 
+        s.prod = r.prod and 
+        s.month = r.month and 
+        ((s.quant between r.prev_avg and r.next_avg) or 
+        (s.quant between r.next_avg and r.prev_avg))
+    GROUP BY r.cust, r.prod, r.month
+    ORDER BY r.cust, r.prod, r.month
