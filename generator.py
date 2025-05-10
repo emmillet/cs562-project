@@ -37,6 +37,26 @@ class phi:
         # having condition
         self.G = None
 
+def process_user_input(S, n, V, F, sigma, G, where):
+    """Helper function to clean user input"""
+    F_clean = [f.strip() for f in F if f.strip()]
+    F_clean = sorted(set(F_clean), key=lambda x: (int(x[0]) if x[0].isdigit() else 0, x))
+
+    sigma_groups = []
+    sigma_raw = ','.join(sigma).strip().split(',')
+    for pred in sigma_raw:
+        pred = pred.strip()
+        if pred:
+            sigma_groups.append(pred)
+    
+    S_groups = []
+    S_raw = ','.join(S).strip().split(',')
+    for s in S_raw:
+        s = s.strip()
+        if s:
+            S_groups.append(s)
+
+    return S_groups, n, V, F_clean, sigma_groups, G, where
 
 def get_input():
     """
@@ -49,10 +69,10 @@ def get_input():
         n = input("Please enter the number of grouping variable(s) (n): ")
         V = input("Please enter the grouping attribute(s), seperated by a comma (V): ").strip().lower().split(",")
         F = input("Please enter the aggregate function(s) seperated by a comma [F]: ").strip().lower().split(",")
-        sigma = input("Please enter the grouping variable predicate(s), seperated by a comma [sigma]: ").strip().lower()
+        sigma = input("Please enter the grouping variable predicate(s), seperated by a comma [sigma]: ").strip()
         G = input("Please enter the predicate(s) for the having clause: ").strip().lower()
         where = input("Please enter any 'WHERE' clause for the query, NOT including the word WHERE: ").strip().lower()
-        return [S], int(n), V, F, [sigma], G, where
+        return process_user_input([S], int(n), V, F, [sigma], G, where)
     # if command line flag, prompt user to enter the phi values through command line
     elif cmnd == 'f':
         file = input("Please enter the name of the file to read: ").strip()

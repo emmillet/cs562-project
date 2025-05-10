@@ -1,0 +1,8 @@
+EXAMPLE USER INPUT:
+
+S: cust, f1_sum_quant, f2_sum_quant, f3_sum_quant
+n: 3
+V: cust
+[F]: f1_sum_quant, f1_avg_quant, f2_sum_quant, f3_sum_quant, f3_avg_quant
+[Sigma]: a.state=NY, b.state=NJ, c.state=CT
+G: f1_sum_quant > 2 * f2_sum_quant or f1_avg_quant > f3_avg_quant
