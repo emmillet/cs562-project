@@ -1,4 +1,4 @@
 select cust, x.prod, x.date, x.state, min(x.quant), y.prod, y.date, y.state, max(y.quant), avg(z.quant)
 from sales
-group by cust; x, y, z
+group by cust : x, y, z
 such that x.cust = cust and y.cust = cust and z.cust = cust

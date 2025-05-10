@@ -1,7 +1,0 @@
-select cust, sum(x.quant), sum(y.quant), sum(z.quant)
-from sales
-group by cust ; x, y, z
-such that x.state = NY
-and y.state = NJ
-and z.state = CT
-having sum(x.quant) > 2 * sum(y.quant) or avg(x.quant) > avg(z.quant);

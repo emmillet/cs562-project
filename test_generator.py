@@ -1,3 +1,10 @@
+"""
+This program is built to faciliate the testing of the built QPE by running MF queries against equivalent SQL expressions. 
+
+Zachary Emmanuel Altuna -- CWID: 20015297
+Emma Millet -- CWID: 20014914
+"""
+
 from decimal import Decimal
 import os
 import psycopg2
@@ -80,6 +87,7 @@ def run_test(mf_file, sql_query, test_num):
         print(f"ERROR: {e}")
         return False
     finally:
+        #Close connection
         if 'conn' in locals():
             conn.close()
 
@@ -105,12 +113,26 @@ def main():
         {
             "mf_file": "mf_input2.txt",
             "sql_query": """
-                SELECT x.cust, AVG(x.quant), AVG(y.quant)
-                FROM (SELECT cust, quant FROM sales WHERE date > '2018-12-31') x
-                JOIN (SELECT cust, quant FROM sales WHERE date < '2019-01-01') y
-                ON x.cust = y.cust
-                GROUP BY x.cust
-                HAVING AVG(y.quant) > AVG(x.quant)
+                SELECT 
+                    s.cust, 
+                    s.prod, 
+                    AVG(x.quant) AS avg_x_quant, 
+                    AVG(y.quant) AS avg_y_quant
+                FROM 
+                    sales s
+                JOIN sales x 
+                    ON s.cust = x.cust 
+                    AND s.prod = x.prod 
+                    AND x.date > '2018-12-31'
+                JOIN sales y 
+                    ON s.cust = y.cust 
+                    AND s.prod = y.prod 
+                    AND y.date < '2018-12-31'
+                GROUP BY 
+                    s.cust, s.prod
+                HAVING 
+                    AVG(y.quant) > AVG(x.quant);
+
             """
         },
         {

@@ -1,6 +1,6 @@
 select cust, SUM(x.quant), SUM(y.quant)
 where year = 2020
 from sales
-group by cust ; x, y
+group by cust : x, y
 such that x.day <= 15 and y.day > 15
 having SUM(x.quant) > SUM(y.quant)

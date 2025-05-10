@@ -1,5 +1,5 @@
 select year, SUM(x.quant), SUM(y.quant)
 from sales
-group by year ; x, y
+group by year : x, y
 such that x.state = NJ and y.state = NY
 having SUM(x.quant) > SUM(y.quant)

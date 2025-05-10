@@ -1,6 +1,7 @@
-select cust, month, sum(x.quant), sum(y.quant), sum(z.quant)
+select prod, month, count(z.prod)
 from sales
-group by cust, month; x, y, z
-such that x.month = month
-and y.state = x.month - 1
-and z.state = x.month + 1
+where year=2020
+group by prod,month : x,y,z
+such that x.prod = prod and x.month = x.month-1,
+y.prod = prod and y.month = y.month+1,
+z.prod = prod and z.month = month

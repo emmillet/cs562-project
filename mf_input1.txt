@@ -1,7 +1,7 @@
-select cust, sum(x.quant), sum(y.quant), sum(z.quant)
+select cust, sum(a.quant), sum(b.quant), sum(c.quant)
 from sales
-group by cust ; x, y, z
-such that x.state = NY
-and y.state = NJ
-and z.state = CT
-having sum(x.quant) > 2 * sum(y.quant) or avg(x.quant) > avg(z.quant);
+group by cust : a, b, c
+such that a.state = NY
+and b.state = NJ
+and c.state = CT
+having sum(a.quant) > 2 * sum(b.quant) or avg(a.quant) > avg(c.quant);
