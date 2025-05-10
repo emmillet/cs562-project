@@ -1,0 +1,19 @@
+SELECT 
+    s.cust, 
+    s.prod, 
+    AVG(x.quant) AS avg_x_quant, 
+    AVG(y.quant) AS avg_y_quant
+FROM 
+    sales s
+JOIN sales x 
+    ON s.cust = x.cust 
+    AND s.prod = x.prod 
+    AND x.date > '2018-12-31'
+JOIN sales y 
+    ON s.cust = y.cust 
+    AND s.prod = y.prod 
+    AND y.date < '2018-12-31'
+GROUP BY 
+    s.cust, s.prod
+HAVING 
+    AVG(y.quant) > AVG(x.quant);

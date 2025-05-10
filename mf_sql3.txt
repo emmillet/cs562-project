@@ -1,0 +1,7 @@
+SELECT cust,
+    SUM(CASE WHEN day <= 15 THEN quant END),
+    SUM(CASE WHEN day > 15 THEN quant END)
+FROM sales WHERE year = 2020
+GROUP BY cust
+HAVING SUM(CASE WHEN day <= 15 THEN quant END) >
+    SUM(CASE WHEN day > 15 THEN quant END)

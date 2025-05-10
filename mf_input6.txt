@@ -1,7 +1,4 @@
-select prod, month, count(z.prod)
+select cust, x.prod, x.date, x.state, min(x.quant), y.prod, y.date, y.state, max(y.quant), avg(z.quant)
 from sales
-where year=2020
-group by prod,month : x,y,z
-such that x.prod = prod and x.month = x.month-1,
-y.prod = prod and y.month = y.month+1,
-z.prod = prod and z.month = month
+group by cust : x, y, z
+such that x.cust = cust and y.cust = cust and z.cust = cust

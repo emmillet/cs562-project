@@ -1,0 +1,7 @@
+SELECT prod, 
+    AVG(CASE WHEN year = 2019 THEN quant END),
+    AVG(CASE WHEN year = 2020 THEN quant END)
+FROM sales WHERE year IN (2019, 2020)
+GROUP BY prod
+HAVING AVG(CASE WHEN year = 2019 THEN quant END) >
+    AVG(CASE WHEN year = 2020 THEN quant END)

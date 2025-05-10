@@ -1,0 +1,7 @@
+SELECT year, 
+    SUM(CASE WHEN state = 'NJ' THEN quant END),
+    SUM(CASE WHEN state = 'NY' THEN quant END)
+FROM sales WHERE state IN ('NJ', 'NY')
+GROUP BY year
+HAVING SUM(CASE WHEN state = 'NJ' THEN quant END) >
+    SUM(CASE WHEN state = 'NY' THEN quant END)

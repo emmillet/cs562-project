@@ -1,0 +1,11 @@
+SELECT cust, 
+    SUM(CASE WHEN state = 'NY' THEN quant ELSE 0 END),
+    SUM(CASE WHEN state = 'NJ' THEN quant ELSE 0 END),
+    SUM(CASE WHEN state = 'CT' THEN quant ELSE 0 END)
+FROM sales
+GROUP BY cust
+HAVING SUM(CASE WHEN state = 'NY' THEN quant ELSE 0 END) > 
+    2 * SUM(CASE WHEN state = 'NJ' THEN quant ELSE 0 END)
+    OR
+    AVG(CASE WHEN state = 'NY' THEN quant ELSE NULL END) > 
+    AVG(CASE WHEN state = 'CT' THEN quant ELSE NULL END)
