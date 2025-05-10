@@ -23,7 +23,7 @@ def query():
     
     _global = []
     
-    S, n, V, F, sigma, G = get_input()
+    S, n, V, F, sigma, G, where = get_input()
     class mf_struct:
         def __init__(self):
             self.S = [] # projected values
@@ -39,7 +39,7 @@ def query():
     mf_struct.F = F
     mf_struct.sigma = sigma
     mf_struct.G = G
-    H = H_table(mf_struct)
+    H = H_table(mf_struct, where)
     
     
     return tabulate.tabulate(H,

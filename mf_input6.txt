@@ -1,0 +1,6 @@
+select cust, month, sum(x.quant), sum(y.quant), sum(z.quant)
+from sales
+group by cust, month; x, y, z
+such that x.month = month
+and y.state = x.month - 1
+and z.state = x.month + 1

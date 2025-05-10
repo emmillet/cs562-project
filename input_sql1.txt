@@ -1,0 +1,4 @@
+select cust, prod, avg(quant), max(quant)
+from sales
+where year=2016
+group by cust, prod
